@@ -1,0 +1,29 @@
+import type { Stage, StageId } from "./types";
+
+export const STAGES: Stage[] = [
+  { id: "intake", code: "01", title: "Intake", accent: "teal" },
+  { id: "acknowledge", code: "02", title: "Acknowledged", accent: "teal" },
+  { id: "ai_screen", code: "03", title: "AI Screen", accent: "violet" },
+  { id: "recruiter_review", code: "04", title: "Recruiter Review", accent: "amber" },
+  { id: "interview_invite", code: "05", title: "Interview Invite", accent: "teal" },
+  { id: "screening_call", code: "06", title: "Screening Call", accent: "ink" },
+  { id: "team_interviews", code: "07", title: "Team Interviews", accent: "ink" },
+  { id: "offer", code: "08", title: "Offer", accent: "green" },
+  { id: "preboard", code: "09", title: "Preboard", accent: "green" },
+  { id: "hired", code: "✓", title: "Hired", accent: "green", terminal: true },
+  { id: "rejected", code: "✕", title: "Rejected", accent: "rose", terminal: true },
+];
+
+const ORDER: StageId[] = STAGES.filter((s) => !s.terminal).map((s) => s.id);
+
+export function nextStage(stage: StageId): StageId {
+  const idx = ORDER.indexOf(stage);
+  if (idx === -1 || idx === ORDER.length - 1) return "hired";
+  return ORDER[idx + 1];
+}
+
+export function stageById(id: StageId): Stage {
+  const found = STAGES.find((s) => s.id === id);
+  if (!found) throw new Error(`Unknown stage: ${id}`);
+  return found;
+}

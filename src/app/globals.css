@@ -1,0 +1,63 @@
+@import "tailwindcss";
+
+:root {
+  --background: #FBFAF7;
+  --foreground: #17233B;
+
+  --color-paper: #FBFAF7;
+  --color-panel: #FFFFFF;
+  --color-ink: #17233B;
+  --color-ink-soft: #3C4A63;
+  --color-muted: #6B6459;
+  --color-line: #E7E2D8;
+  --color-line-strong: #D6CFC2;
+  --color-teal: #0E8C7F;
+  --color-teal-soft: #E4F1EE;
+  --color-amber: #D98A11;
+  --color-amber-soft: #FBF0DA;
+  --color-rose: #BE4E63;
+  --color-rose-soft: #F8E7EB;
+  --color-green: #2E9E6B;
+  --color-green-soft: #E3F2EA;
+  --color-violet: #5B5BD6;
+  --color-violet-soft: #EAEAFA;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-paper: var(--color-paper);
+  --color-panel: var(--color-panel);
+  --color-ink: var(--color-ink);
+  --color-ink-soft: var(--color-ink-soft);
+  --color-muted: var(--color-muted);
+  --color-line: var(--color-line);
+  --color-line-strong: var(--color-line-strong);
+  --color-teal: var(--color-teal);
+  --color-teal-soft: var(--color-teal-soft);
+  --color-amber: var(--color-amber);
+  --color-amber-soft: var(--color-amber-soft);
+  --color-rose: var(--color-rose);
+  --color-rose-soft: var(--color-rose-soft);
+  --color-green: var(--color-green);
+  --color-green-soft: var(--color-green-soft);
+  --color-violet: var(--color-violet);
+  --color-violet-soft: var(--color-violet-soft);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-serif: var(--font-fraunces);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-line-strong);
+  border-radius: 999px;
+}
