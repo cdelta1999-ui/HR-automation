@@ -30,6 +30,7 @@ export interface Candidate {
   daysInStage: number;
   recruiter: string;
   aiScore?: number;
+  rejectedFromStage?: StageId;
 }
 
 export interface EmailLogEntry {

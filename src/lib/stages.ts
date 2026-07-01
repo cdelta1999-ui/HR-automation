@@ -17,10 +17,16 @@ export const STAGES: Stage[] = [
 
 const ORDER: StageId[] = STAGES.filter((s) => !s.terminal).map((s) => s.id);
 
+export const PIPELINE_STAGES: Stage[] = STAGES.filter((s) => !s.terminal);
+
 export function nextStage(stage: StageId): StageId {
   const idx = ORDER.indexOf(stage);
   if (idx === -1 || idx === ORDER.length - 1) return "hired";
   return ORDER[idx + 1];
+}
+
+export function stageOrderIndex(stage: StageId): number {
+  return ORDER.indexOf(stage);
 }
 
 export function stageById(id: StageId): Stage {

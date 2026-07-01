@@ -26,12 +26,20 @@ export default function DashboardPage() {
             Day One.
           </p>
         </div>
-        <Link
-          href="/candidate-experience-workflow.html"
-          className="rounded-full border border-line-strong px-4 py-2 text-sm text-ink-soft transition-colors hover:border-teal hover:text-teal"
-        >
-          View workflow map ↗
-        </Link>
+        <div className="flex gap-3">
+          <Link
+            href="/dashboard/analytics"
+            className="rounded-full border border-line-strong px-4 py-2 text-sm text-ink-soft transition-colors hover:border-teal hover:text-teal"
+          >
+            View analytics ↗
+          </Link>
+          <Link
+            href="/candidate-experience-workflow.html"
+            className="rounded-full border border-line-strong px-4 py-2 text-sm text-ink-soft transition-colors hover:border-teal hover:text-teal"
+          >
+            View workflow map ↗
+          </Link>
+        </div>
       </div>
 
       <PipelineBoard initialBoard={board} />

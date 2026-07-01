@@ -18,6 +18,6 @@ export const CANDIDATES: Candidate[] = [
   { id: "c15", name: "Ines Duarte", roleTitle: "Customer Success Manager", appliedOn: "2026-06-05", stage: "offer", daysInStage: 2, recruiter: "Sam Osei", aiScore: 88 },
   { id: "c16", name: "Wei Zhang", roleTitle: "Senior Frontend Engineer", appliedOn: "2026-05-30", stage: "preboard", daysInStage: 3, recruiter: "Dana Kim", aiScore: 91 },
   { id: "c17", name: "Amara Diallo", roleTitle: "Backend Engineer", appliedOn: "2026-05-20", stage: "hired", daysInStage: 0, recruiter: "Sam Osei", aiScore: 89 },
-  { id: "c18", name: "Ben Whitfield", roleTitle: "Data Analyst", appliedOn: "2026-06-19", stage: "rejected", daysInStage: 0, recruiter: "Priya Sharma", aiScore: 42 },
-  { id: "c19", name: "Chloe Bennett", roleTitle: "Product Designer", appliedOn: "2026-06-12", stage: "rejected", daysInStage: 0, recruiter: "Dana Kim", aiScore: 58 },
+  { id: "c18", name: "Ben Whitfield", roleTitle: "Data Analyst", appliedOn: "2026-06-19", stage: "rejected", daysInStage: 0, recruiter: "Priya Sharma", aiScore: 42, rejectedFromStage: "ai_screen" },
+  { id: "c19", name: "Chloe Bennett", roleTitle: "Product Designer", appliedOn: "2026-06-12", stage: "rejected", daysInStage: 0, recruiter: "Dana Kim", aiScore: 58, rejectedFromStage: "recruiter_review" },
 ];

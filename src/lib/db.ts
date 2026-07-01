@@ -39,7 +39,8 @@ function getDb(): DatabaseSync {
       stage TEXT NOT NULL,
       days_in_stage INTEGER NOT NULL,
       recruiter TEXT NOT NULL,
-      ai_score INTEGER
+      ai_score INTEGER,
+      rejected_from_stage TEXT
     );
     CREATE TABLE IF NOT EXISTS events (
       id TEXT PRIMARY KEY,
@@ -56,8 +57,16 @@ function getDb(): DatabaseSync {
       sent_at TEXT NOT NULL
     );
   `);
+  migrate(db);
   seedIfEmpty(db);
   return db;
+}
+
+function migrate(database: DatabaseSync) {
+  const columns = database.prepare("PRAGMA table_info(candidates)").all() as { name: string }[];
+  if (!columns.some((c) => c.name === "rejected_from_stage")) {
+    database.exec("ALTER TABLE candidates ADD COLUMN rejected_from_stage TEXT");
+  }
 }
 
 function seedIfEmpty(database: DatabaseSync) {
@@ -67,8 +76,8 @@ function seedIfEmpty(database: DatabaseSync) {
   if (row.count > 0) return;
 
   const insertCandidate = database.prepare(
-    `INSERT INTO candidates (id, name, role_title, applied_on, stage, days_in_stage, recruiter, ai_score)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO candidates (id, name, role_title, applied_on, stage, days_in_stage, recruiter, ai_score, rejected_from_stage)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   const insertEvent = database.prepare(
     `INSERT INTO events (id, candidate_id, label, at) VALUES (?, ?, ?, ?)`,
@@ -84,6 +93,7 @@ function seedIfEmpty(database: DatabaseSync) {
       c.daysInStage,
       c.recruiter,
       c.aiScore ?? null,
+      c.rejectedFromStage ?? null,
     );
     insertEvent.run(`${c.id}-applied`, c.id, "Application submitted", c.appliedOn);
   }
@@ -99,6 +109,7 @@ function rowToCandidate(row: Record<string, unknown>): Candidate {
     daysInStage: row.days_in_stage as number,
     recruiter: row.recruiter as string,
     aiScore: row.ai_score == null ? undefined : (row.ai_score as number),
+    rejectedFromStage: row.rejected_from_stage == null ? undefined : (row.rejected_from_stage as StageId),
   };
 }
 
@@ -191,9 +202,11 @@ export function rejectCandidate(id: string): BoardState | undefined {
   if (!candidate) return undefined;
 
   database
-    .prepare("UPDATE candidates SET stage = 'rejected', days_in_stage = 0 WHERE id = ?")
-    .run(id);
-  logEvent(database, id, "Moved to Rejected");
+    .prepare(
+      "UPDATE candidates SET stage = 'rejected', days_in_stage = 0, rejected_from_stage = ? WHERE id = ?",
+    )
+    .run(candidate.stage, id);
+  logEvent(database, id, `Moved to Rejected (from ${stageById(candidate.stage).title})`);
   logEmail(database, candidate, "rejected");
   return getBoardState();
 }
