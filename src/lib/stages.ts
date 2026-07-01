@@ -1,4 +1,5 @@
 import type { Stage, StageId } from "./types";
+import type { EmailTemplateId } from "./emailTemplates";
 
 export const STAGES: Stage[] = [
   { id: "intake", code: "01", title: "Intake", accent: "teal" },
@@ -26,4 +27,15 @@ export function stageById(id: StageId): Stage {
   const found = STAGES.find((s) => s.id === id);
   if (!found) throw new Error(`Unknown stage: ${id}`);
   return found;
+}
+
+const STAGE_EMAIL_TEMPLATES: Partial<Record<StageId, EmailTemplateId>> = {
+  acknowledge: "application_received",
+  interview_invite: "interview_invite",
+  offer: "offer",
+  rejected: "rejection",
+};
+
+export function emailTemplateForStage(stage: StageId): EmailTemplateId | undefined {
+  return STAGE_EMAIL_TEMPLATES[stage];
 }

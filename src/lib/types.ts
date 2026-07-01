@@ -1,3 +1,5 @@
+import type { EmailTemplateId } from "./emailTemplates";
+
 export type StageId =
   | "intake"
   | "acknowledge"
@@ -28,4 +30,13 @@ export interface Candidate {
   daysInStage: number;
   recruiter: string;
   aiScore?: number;
+}
+
+export interface EmailLogEntry {
+  id: string;
+  candidateId: string;
+  candidateName: string;
+  templateId: EmailTemplateId;
+  subject: string;
+  sentAt: string;
 }

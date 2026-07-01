@@ -1,15 +1,35 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { Candidate } from "@/lib/types";
-import { STAGES, nextStage, stageById } from "@/lib/stages";
+import type { Candidate, EmailLogEntry } from "@/lib/types";
+import { STAGES, nextStage, stageById, emailTemplateForStage } from "@/lib/stages";
+import { renderTemplate } from "@/lib/emailTemplates";
 import { StageBadge } from "./StageBadge";
 import { CandidateCard } from "./CandidateCard";
 import { KpiStrip } from "./KpiStrip";
+import { EmailActivity } from "./EmailActivity";
 
 export function PipelineBoard({ initialCandidates }: { initialCandidates: Candidate[] }) {
   const [candidates, setCandidates] = useState(initialCandidates);
+  const [emailLog, setEmailLog] = useState<EmailLogEntry[]>([]);
   const [query, setQuery] = useState("");
+
+  function logEmailForStage(candidate: Candidate, stage: Candidate["stage"]) {
+    const templateId = emailTemplateForStage(stage);
+    if (!templateId) return;
+    const { subject } = renderTemplate(templateId, candidate);
+    setEmailLog((prev) => [
+      {
+        id: `${candidate.id}-${templateId}-${Date.now()}`,
+        candidateId: candidate.id,
+        candidateName: candidate.name,
+        templateId,
+        subject,
+        sentAt: new Date().toISOString(),
+      },
+      ...prev,
+    ]);
+  }
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -23,12 +43,17 @@ export function PipelineBoard({ initialCandidates }: { initialCandidates: Candid
   }, [candidates, query]);
 
   function advance(id: string) {
-    setCandidates((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, stage: nextStage(c.stage), daysInStage: 0 } : c)),
-    );
+    const candidate = candidates.find((c) => c.id === id);
+    if (!candidate) return;
+    const stage = nextStage(candidate.stage);
+    logEmailForStage(candidate, stage);
+    setCandidates((prev) => prev.map((c) => (c.id === id ? { ...c, stage, daysInStage: 0 } : c)));
   }
 
   function reject(id: string) {
+    const candidate = candidates.find((c) => c.id === id);
+    if (!candidate) return;
+    logEmailForStage(candidate, "rejected");
     setCandidates((prev) =>
       prev.map((c) => (c.id === id ? { ...c, stage: "rejected", daysInStage: 0 } : c)),
     );
@@ -72,6 +97,8 @@ export function PipelineBoard({ initialCandidates }: { initialCandidates: Candid
           );
         })}
       </div>
+
+      <EmailActivity log={emailLog} />
     </div>
   );
 }
