@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import type { Candidate, EmailLogEntry } from "@/lib/types";
 import { STAGES, nextStage, stageById, emailTemplateForStage } from "@/lib/stages";
 import { renderTemplate } from "@/lib/emailTemplates";
+import { scoreCandidate } from "@/lib/aiScreening";
 import { StageBadge } from "./StageBadge";
 import { CandidateCard } from "./CandidateCard";
 import { KpiStrip } from "./KpiStrip";
@@ -50,6 +51,12 @@ export function PipelineBoard({ initialCandidates }: { initialCandidates: Candid
     setCandidates((prev) => prev.map((c) => (c.id === id ? { ...c, stage, daysInStage: 0 } : c)));
   }
 
+  function runAiScreen(id: string) {
+    setCandidates((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, aiScore: scoreCandidate(c) } : c)),
+    );
+  }
+
   function reject(id: string) {
     const candidate = candidates.find((c) => c.id === id);
     if (!candidate) return;
@@ -90,6 +97,7 @@ export function PipelineBoard({ initialCandidates }: { initialCandidates: Candid
                     terminal={!!stageById(candidate.stage).terminal}
                     onAdvance={advance}
                     onReject={reject}
+                    onScore={runAiScreen}
                   />
                 ))}
               </div>
