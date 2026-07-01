@@ -1,12 +1,16 @@
 import Link from "next/link";
 import { PipelineBoard } from "@/components/PipelineBoard";
-import { CANDIDATES } from "@/lib/data";
+import { getBoardState } from "@/lib/db";
+
+export const dynamic = "force-dynamic";
 
 export const metadata = {
   title: "Candidate Pipeline · HR Automation",
 };
 
 export default function DashboardPage() {
+  const board = getBoardState();
+
   return (
     <div className="mx-auto flex min-h-screen max-w-[1400px] flex-col gap-8 px-6 py-10">
       <div className="flex flex-wrap items-end justify-between gap-4 border-b border-line pb-6">
@@ -30,7 +34,7 @@ export default function DashboardPage() {
         </Link>
       </div>
 
-      <PipelineBoard initialCandidates={CANDIDATES} />
+      <PipelineBoard initialBoard={board} />
     </div>
   );
 }

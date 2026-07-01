@@ -1,58 +1,39 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import type { Candidate, CandidateEvent, EmailLogEntry } from "@/lib/types";
-import { STAGES, nextStage, stageById, emailTemplateForStage } from "@/lib/stages";
-import { renderTemplate } from "@/lib/emailTemplates";
-import { scoreCandidate, recommendationForScore } from "@/lib/aiScreening";
+import { useMemo, useState, useTransition } from "react";
+import type { BoardState } from "@/lib/db";
+import { STAGES, stageById } from "@/lib/stages";
 import { StageBadge } from "./StageBadge";
 import { CandidateCard } from "./CandidateCard";
 import { KpiStrip } from "./KpiStrip";
 import { EmailActivity } from "./EmailActivity";
 import { CandidateDetailPanel } from "./CandidateDetailPanel";
 
-const RECOMMENDATION_LABEL: Record<ReturnType<typeof recommendationForScore>, string> = {
-  advance: "strong match",
-  review: "borderline",
-  reject: "below bar",
-};
+type Action = "advance" | "reject" | "score";
 
-export function PipelineBoard({ initialCandidates }: { initialCandidates: Candidate[] }) {
-  const [candidates, setCandidates] = useState(initialCandidates);
-  const [emailLog, setEmailLog] = useState<EmailLogEntry[]>([]);
-  const [events, setEvents] = useState<CandidateEvent[]>(() =>
-    initialCandidates.map((c) => ({
-      id: `${c.id}-applied`,
-      candidateId: c.id,
-      label: "Application submitted",
-      at: c.appliedOn,
-    })),
-  );
+async function runAction(id: string, action: Action): Promise<BoardState> {
+  const res = await fetch(`/api/candidates/${id}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action }),
+  });
+  if (!res.ok) throw new Error(`Failed to ${action} candidate`);
+  return res.json();
+}
+
+export function PipelineBoard({ initialBoard }: { initialBoard: BoardState }) {
+  const [board, setBoard] = useState(initialBoard);
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [, startTransition] = useTransition();
 
-  function logEvent(candidateId: string, label: string) {
-    setEvents((prev) => [
-      { id: `${candidateId}-${Date.now()}-${Math.random()}`, candidateId, label, at: new Date().toISOString() },
-      ...prev,
-    ]);
-  }
+  const { candidates, events, emailLog } = board;
 
-  function logEmailForStage(candidate: Candidate, stage: Candidate["stage"]) {
-    const templateId = emailTemplateForStage(stage);
-    if (!templateId) return;
-    const { subject } = renderTemplate(templateId, candidate);
-    setEmailLog((prev) => [
-      {
-        id: `${candidate.id}-${templateId}-${Date.now()}`,
-        candidateId: candidate.id,
-        candidateName: candidate.name,
-        templateId,
-        subject,
-        sentAt: new Date().toISOString(),
-      },
-      ...prev,
-    ]);
+  function dispatch(id: string, action: Action) {
+    startTransition(async () => {
+      const next = await runAction(id, action);
+      setBoard(next);
+    });
   }
 
   const filtered = useMemo(() => {
@@ -66,39 +47,9 @@ export function PipelineBoard({ initialCandidates }: { initialCandidates: Candid
     );
   }, [candidates, query]);
 
-  function advance(id: string) {
-    const candidate = candidates.find((c) => c.id === id);
-    if (!candidate) return;
-    const stage = nextStage(candidate.stage);
-    logEmailForStage(candidate, stage);
-    logEvent(id, `Moved to ${stageById(stage).title}`);
-    setCandidates((prev) => prev.map((c) => (c.id === id ? { ...c, stage, daysInStage: 0 } : c)));
-  }
-
-  function runAiScreen(id: string) {
-    const candidate = candidates.find((c) => c.id === id);
-    if (!candidate) return;
-    const score = scoreCandidate(candidate);
-    logEvent(id, `AI screen scored ${score} (${RECOMMENDATION_LABEL[recommendationForScore(score)]})`);
-    setCandidates((prev) => prev.map((c) => (c.id === id ? { ...c, aiScore: score } : c)));
-  }
-
-  function reject(id: string) {
-    const candidate = candidates.find((c) => c.id === id);
-    if (!candidate) return;
-    logEmailForStage(candidate, "rejected");
-    logEvent(id, "Moved to Rejected");
-    setCandidates((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, stage: "rejected", daysInStage: 0 } : c)),
-    );
-  }
-
   const selectedCandidate = candidates.find((c) => c.id === selectedId) ?? null;
   const selectedEvents = useMemo(
-    () =>
-      selectedId
-        ? events.filter((e) => e.candidateId === selectedId).sort((a, b) => (a.at < b.at ? 1 : -1))
-        : [],
+    () => (selectedId ? events.filter((e) => e.candidateId === selectedId) : []),
     [events, selectedId],
   );
 
@@ -131,9 +82,9 @@ export function PipelineBoard({ initialCandidates }: { initialCandidates: Candid
                     key={candidate.id}
                     candidate={candidate}
                     terminal={!!stageById(candidate.stage).terminal}
-                    onAdvance={advance}
-                    onReject={reject}
-                    onScore={runAiScreen}
+                    onAdvance={(id) => dispatch(id, "advance")}
+                    onReject={(id) => dispatch(id, "reject")}
+                    onScore={(id) => dispatch(id, "score")}
                     onOpen={setSelectedId}
                   />
                 ))}
@@ -151,9 +102,9 @@ export function PipelineBoard({ initialCandidates }: { initialCandidates: Candid
           events={selectedEvents}
           terminal={!!stageById(selectedCandidate.stage).terminal}
           onClose={() => setSelectedId(null)}
-          onAdvance={advance}
-          onReject={reject}
-          onScore={runAiScreen}
+          onAdvance={(id) => dispatch(id, "advance")}
+          onReject={(id) => dispatch(id, "reject")}
+          onScore={(id) => dispatch(id, "score")}
         />
       )}
     </div>
