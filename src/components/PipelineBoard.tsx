@@ -1,19 +1,42 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { Candidate, EmailLogEntry } from "@/lib/types";
+import type { Candidate, CandidateEvent, EmailLogEntry } from "@/lib/types";
 import { STAGES, nextStage, stageById, emailTemplateForStage } from "@/lib/stages";
 import { renderTemplate } from "@/lib/emailTemplates";
-import { scoreCandidate } from "@/lib/aiScreening";
+import { scoreCandidate, recommendationForScore } from "@/lib/aiScreening";
 import { StageBadge } from "./StageBadge";
 import { CandidateCard } from "./CandidateCard";
 import { KpiStrip } from "./KpiStrip";
 import { EmailActivity } from "./EmailActivity";
+import { CandidateDetailPanel } from "./CandidateDetailPanel";
+
+const RECOMMENDATION_LABEL: Record<ReturnType<typeof recommendationForScore>, string> = {
+  advance: "strong match",
+  review: "borderline",
+  reject: "below bar",
+};
 
 export function PipelineBoard({ initialCandidates }: { initialCandidates: Candidate[] }) {
   const [candidates, setCandidates] = useState(initialCandidates);
   const [emailLog, setEmailLog] = useState<EmailLogEntry[]>([]);
+  const [events, setEvents] = useState<CandidateEvent[]>(() =>
+    initialCandidates.map((c) => ({
+      id: `${c.id}-applied`,
+      candidateId: c.id,
+      label: "Application submitted",
+      at: c.appliedOn,
+    })),
+  );
   const [query, setQuery] = useState("");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  function logEvent(candidateId: string, label: string) {
+    setEvents((prev) => [
+      { id: `${candidateId}-${Date.now()}-${Math.random()}`, candidateId, label, at: new Date().toISOString() },
+      ...prev,
+    ]);
+  }
 
   function logEmailForStage(candidate: Candidate, stage: Candidate["stage"]) {
     const templateId = emailTemplateForStage(stage);
@@ -48,23 +71,36 @@ export function PipelineBoard({ initialCandidates }: { initialCandidates: Candid
     if (!candidate) return;
     const stage = nextStage(candidate.stage);
     logEmailForStage(candidate, stage);
+    logEvent(id, `Moved to ${stageById(stage).title}`);
     setCandidates((prev) => prev.map((c) => (c.id === id ? { ...c, stage, daysInStage: 0 } : c)));
   }
 
   function runAiScreen(id: string) {
-    setCandidates((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, aiScore: scoreCandidate(c) } : c)),
-    );
+    const candidate = candidates.find((c) => c.id === id);
+    if (!candidate) return;
+    const score = scoreCandidate(candidate);
+    logEvent(id, `AI screen scored ${score} (${RECOMMENDATION_LABEL[recommendationForScore(score)]})`);
+    setCandidates((prev) => prev.map((c) => (c.id === id ? { ...c, aiScore: score } : c)));
   }
 
   function reject(id: string) {
     const candidate = candidates.find((c) => c.id === id);
     if (!candidate) return;
     logEmailForStage(candidate, "rejected");
+    logEvent(id, "Moved to Rejected");
     setCandidates((prev) =>
       prev.map((c) => (c.id === id ? { ...c, stage: "rejected", daysInStage: 0 } : c)),
     );
   }
+
+  const selectedCandidate = candidates.find((c) => c.id === selectedId) ?? null;
+  const selectedEvents = useMemo(
+    () =>
+      selectedId
+        ? events.filter((e) => e.candidateId === selectedId).sort((a, b) => (a.at < b.at ? 1 : -1))
+        : [],
+    [events, selectedId],
+  );
 
   return (
     <div className="flex flex-col gap-6">
@@ -98,6 +134,7 @@ export function PipelineBoard({ initialCandidates }: { initialCandidates: Candid
                     onAdvance={advance}
                     onReject={reject}
                     onScore={runAiScreen}
+                    onOpen={setSelectedId}
                   />
                 ))}
               </div>
@@ -107,6 +144,18 @@ export function PipelineBoard({ initialCandidates }: { initialCandidates: Candid
       </div>
 
       <EmailActivity log={emailLog} />
+
+      {selectedCandidate && (
+        <CandidateDetailPanel
+          candidate={selectedCandidate}
+          events={selectedEvents}
+          terminal={!!stageById(selectedCandidate.stage).terminal}
+          onClose={() => setSelectedId(null)}
+          onAdvance={advance}
+          onReject={reject}
+          onScore={runAiScreen}
+        />
+      )}
     </div>
   );
 }

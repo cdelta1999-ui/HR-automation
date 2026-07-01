@@ -40,3 +40,10 @@ export interface EmailLogEntry {
   subject: string;
   sentAt: string;
 }
+
+export interface CandidateEvent {
+  id: string;
+  candidateId: string;
+  label: string;
+  at: string;
+}

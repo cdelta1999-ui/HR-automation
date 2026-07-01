@@ -13,9 +13,10 @@ interface Props {
   onAdvance: (id: string) => void;
   onReject: (id: string) => void;
   onScore: (id: string) => void;
+  onOpen: (id: string) => void;
 }
 
-export function CandidateCard({ candidate, terminal, onAdvance, onReject, onScore }: Props) {
+export function CandidateCard({ candidate, terminal, onAdvance, onReject, onScore, onOpen }: Props) {
   const awaitingScreen = candidate.stage === "ai_screen" && typeof candidate.aiScore !== "number";
   const recommendation =
     candidate.stage === "ai_screen" && typeof candidate.aiScore === "number"
@@ -26,9 +27,12 @@ export function CandidateCard({ candidate, terminal, onAdvance, onReject, onScor
     <div className="rounded-xl border border-line bg-panel p-3 shadow-sm">
       <div className="flex items-start justify-between gap-2">
         <div>
-          <p className="font-serif text-[15px] font-semibold leading-tight text-ink">
+          <button
+            onClick={() => onOpen(candidate.id)}
+            className="text-left font-serif text-[15px] font-semibold leading-tight text-ink hover:text-teal hover:underline"
+          >
             {candidate.name}
-          </p>
+          </button>
           <p className="mt-0.5 text-[12.5px] text-muted">{candidate.roleTitle}</p>
         </div>
         {typeof candidate.aiScore === "number" && (
