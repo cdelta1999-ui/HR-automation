@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Automated Candidate Experience Workflow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,500&family=Inter:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#FBFAF7;
+    --panel:#FFFFFF;
+    --ink:#17233B;
+    --ink-soft:#3C4A63;
+    --muted:#6B6459;
+    --line:#E7E2D8;
+    --line-strong:#D6CFC2;
+    --teal:#0E8C7F;      /* active progress */
+    --teal-soft:#E4F1EE;
+    --amber:#D98A11;     /* decisions / attention */
+    --amber-soft:#FBF0DA;
+    --rose:#BE4E63;      /* rejection / exit */
+    --rose-soft:#F8E7EB;
+    --green:#2E9E6B;     /* offer / success */
+    --green-soft:#E3F2EA;
+    --violet:#5B5BD6;    /* AI / intelligence */
+    --violet-soft:#EAEAFA;
+    --radius:14px;
+    --maxw:960px;
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'Inter',system-ui,sans-serif;
+    line-height:1.6;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:var(--maxw);margin:0 auto;padding:0 24px;}
+
+  /* ---------- Type ---------- */
+  h1,h2,h3,h4{font-family:'Fraunces',Georgia,serif;font-weight:600;line-height:1.12;letter-spacing:-0.01em;margin:0;}
+  .mono{font-family:'Space Mono',monospace;}
+  .eyebrow{
+    font-family:'Space Mono',monospace;
+    font-size:12px;letter-spacing:0.18em;text-transform:uppercase;
+    color:var(--teal);font-weight:700;
+  }
+
+  /* ---------- Hero ---------- */
+  header.hero{
+    padding:72px 0 40px;
+    border-bottom:1px solid var(--line);
+    background:
+      radial-gradient(120% 90% at 85% -10%, rgba(14,140,127,0.10), transparent 55%),
+      radial-gradient(90% 70% at 0% 0%, rgba(91,91,214,0.07), transparent 50%);
+  }
+  .hero .kicker{margin-bottom:22px;}
+  .hero h1{font-size:clamp(38px,6.2vw,68px);letter-spacing:-0.025em;max-width:16ch;}
+  .hero h1 em{font-style:italic;color:var(--teal);}
+  .hero p.lede{
+    font-size:clamp(17px,2vw,20px);color:var(--ink-soft);
+    max-width:60ch;margin:22px 0 0;
+  }
+  .meta-row{
+    display:flex;flex-wrap:wrap;gap:10px;margin-top:32px;
+  }
+  .chip{
+    font-family:'Space Mono',monospace;font-size:12px;
+    padding:7px 12px;border:1px solid var(--line-strong);border-radius:999px;
+    color:var(--ink-soft);background:var(--panel);
+  }
+
+  /* ---------- Sections ---------- */
+  section{padding:64px 0;border-bottom:1px solid var(--line);}
+  .sec-head{margin-bottom:12px;}
+  .sec-head h2{font-size:clamp(26px,4vw,40px);margin-top:10px;}
+  .sec-head p{color:var(--muted);max-width:62ch;margin:14px 0 0;font-size:16px;}
+  .num{font-family:'Space Mono',monospace;color:var(--muted);font-size:13px;letter-spacing:0.1em;}
+
+  /* ---------- Legend ---------- */
+  .legend{display:flex;flex-wrap:wrap;gap:10px 20px;margin-top:28px;}
+  .legend .tag{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-soft);}
+  .dot{width:12px;height:12px;border-radius:4px;flex:none;}
+
+  /* ---------- Flowchart ---------- */
+  .flow{margin-top:40px;display:flex;flex-direction:column;align-items:center;}
+  .stage{width:100%;max-width:560px;position:relative;}
+  .connector{width:2px;height:26px;background:var(--line-strong);margin:0 auto;}
+  .connector.active{background:var(--teal);}
+  .node{
+    background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    padding:16px 18px;position:relative;box-shadow:0 1px 0 rgba(23,35,59,0.02);
+  }
+  .node.start,.node.end{
+    text-align:center;border-radius:999px;background:var(--ink);color:#fff;border-color:var(--ink);
+    padding:14px 24px;
+  }
+  .node.start .code,.node.end .code{color:rgba(255,255,255,0.6);}
+  .node.decision{
+    border-style:dashed;border-color:var(--amber);background:var(--amber-soft);
+  }
+  .node .code{font-family:'Space Mono',monospace;font-size:11px;letter-spacing:0.14em;color:var(--muted);text-transform:uppercase;display:block;margin-bottom:6px;}
+  .node .title{font-weight:600;font-size:16.5px;color:var(--ink);}
+  .node .sub{font-size:13.5px;color:var(--muted);margin-top:5px;}
+  .badges{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px;}
+  .badge{
+    font-family:'Space Mono',monospace;font-size:10.5px;letter-spacing:0.06em;
+    padding:4px 9px;border-radius:6px;font-weight:700;text-transform:uppercase;
+  }
+  .b-auto{background:var(--teal-soft);color:#0a6b60;}
+  .b-ai{background:var(--violet-soft);color:#3d3daf;}
+  .b-email{background:var(--amber-soft);color:#a8690a;}
+  .b-human{background:#EFEBE3;color:#5b5245;}
+
+  /* branch card sits beside a decision */
+  .branch-row{display:flex;gap:16px;align-items:stretch;width:100%;max-width:560px;}
+  .branch{
+    flex:1;border-radius:12px;padding:13px 15px;font-size:13px;line-height:1.45;
+  }
+  .branch .lbl{font-family:'Space Mono',monospace;font-size:10.5px;letter-spacing:0.08em;text-transform:uppercase;display:block;margin-bottom:5px;font-weight:700;}
+  .branch.exit{background:var(--rose-soft);color:#7d2e3e;border:1px solid #eccdd4;}
+  .branch.exit .lbl{color:var(--rose);}
+  .branch.hold{background:#F2EFE8;color:#5b5245;border:1px solid var(--line);}
+  .branch.hold .lbl{color:var(--muted);}
+  .branch.go{background:var(--green-soft);color:#1e6d48;border:1px solid #c6e6d4;}
+  .branch.go .lbl{color:var(--green);}
+
+  /* ---------- Email templates ---------- */
+  .emails{display:flex;flex-direction:column;gap:28px;margin-top:36px;}
+  .email{
+    border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;background:var(--panel);
+  }
+  .email .bar{
+    display:flex;align-items:center;gap:10px;padding:12px 18px;
+    border-bottom:1px solid var(--line);background:#FCFBF8;
+  }
+  .email .bar .stagetag{font-family:'Space Mono',monospace;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);}
+  .email .bar .accent{width:9px;height:9px;border-radius:50%;flex:none;}
+  .email .head{padding:18px 22px 6px;}
+  .email .head .lbl{font-family:'Space Mono',monospace;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;}
+  .email .head .subject{font-family:'Fraunces',serif;font-size:20px;font-weight:600;margin:4px 0 2px;}
+  .email .head .preview{font-size:13.5px;color:var(--muted);}
+  .email .body{padding:8px 22px 20px;font-size:15px;color:var(--ink-soft);}
+  .email .body p{margin:12px 0;}
+  .email .body ul{margin:10px 0;padding-left:20px;}
+  .email .body li{margin:5px 0;}
+  .token{
+    font-family:'Space Mono',monospace;font-size:0.86em;background:var(--violet-soft);
+    color:#3d3daf;padding:1px 5px;border-radius:4px;white-space:nowrap;
+  }
+  .why{
+    margin:0;padding:14px 22px;background:var(--teal-soft);
+    border-top:1px solid #cbe6e1;font-size:13.5px;color:#0a5a51;
+  }
+  .why b{color:#084a43;font-family:'Inter';}
+
+  /* ---------- Proposal ---------- */
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px;margin-top:32px;}
+  .card{border:1px solid var(--line);border-radius:var(--radius);padding:20px;background:var(--panel);}
+  .card .icon{font-family:'Space Mono',monospace;font-size:12px;font-weight:700;letter-spacing:0.1em;color:var(--teal);text-transform:uppercase;}
+  .card h4{font-size:18px;margin:10px 0 6px;}
+  .card p{margin:0;font-size:14px;color:var(--muted);}
+  .card .tools{margin-top:12px;display:flex;flex-wrap:wrap;gap:6px;}
+  .tool{font-size:12px;padding:3px 9px;border:1px solid var(--line-strong);border-radius:999px;color:var(--ink-soft);background:var(--paper);}
+
+  .phases{margin-top:36px;display:flex;flex-direction:column;gap:0;}
+  .phase{display:grid;grid-template-columns:120px 1fr;gap:20px;padding:22px 0;border-top:1px solid var(--line);}
+  .phase:last-child{border-bottom:1px solid var(--line);}
+  .phase .when{font-family:'Space Mono',monospace;font-size:13px;color:var(--teal);font-weight:700;}
+  .phase .when small{display:block;color:var(--muted);font-weight:400;margin-top:3px;letter-spacing:0;}
+  .phase h4{font-size:18px;margin:0 0 8px;}
+  .phase ul{margin:0;padding-left:18px;color:var(--ink-soft);font-size:14.5px;}
+  .phase li{margin:5px 0;}
+
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-top:30px;}
+  .kpi{border:1px solid var(--line);border-radius:12px;padding:16px;background:var(--panel);}
+  .kpi .k{font-family:'Fraunces',serif;font-size:15px;font-weight:600;color:var(--ink);}
+  .kpi .v{font-size:13px;color:var(--muted);margin-top:5px;}
+
+  .safeguards{margin-top:30px;border:1px solid #cbe6e1;background:var(--teal-soft);border-radius:var(--radius);padding:24px;}
+  .safeguards h4{font-size:18px;margin:0 0 10px;color:#0a5a51;}
+  .safeguards ul{margin:0;padding-left:20px;color:#0a5a51;font-size:14.5px;}
+  .safeguards li{margin:7px 0;}
+  .safeguards b{font-family:'Inter';}
+
+  footer{padding:46px 0 70px;color:var(--muted);font-size:13px;}
+  footer .mono{color:var(--ink-soft);}
+
+  a{color:var(--teal);}
+
+  @media (max-width:620px){
+    .branch-row{flex-direction:column;}
+    .phase{grid-template-columns:1fr;gap:8px;}
+    .email .subject{font-size:18px;}
+  }
+  @media (prefers-reduced-motion:no-preference){
+    .reveal{opacity:0;transform:translateY(14px);animation:rise .6s ease forwards;}
+    @keyframes rise{to{opacity:1;transform:none;}}
+  }
+  @media print{
+    header.hero,section{border-color:#ccc;}
+    .reveal{opacity:1;transform:none;animation:none;}
+    body{background:#fff;}
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="kicker eyebrow">Talent Operations · Systems &amp; Automation Case Study</div>
+    <h1>The Automated Candidate <em>Experience</em> Workflow</h1>
+    <p class="lede">A complete, human-in-the-loop candidate journey — from the second someone clicks <strong>Apply</strong> to their first day on the job. Every touchpoint is mapped, every silence is closed, and automation carries the volume so recruiters can spend their time on people, not process.</p>
+    <div class="meta-row">
+      <span class="chip">9 mapped stages</span>
+      <span class="chip">4 optimized email templates</span>
+      <span class="chip">Reply-either-way guarantee</span>
+      <span class="chip">AI screening + FAQ concierge</span>
+    </div>
+  </div>
+</header>
+
+<!-- ============ SECTION 1: FLOWCHART ============ -->
+<section id="flow">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="num">01 / THE MAP</span>
+      <h2>The candidate journey, station by station</h2>
+      <p>Read it top to bottom like a transit line. The spine is the path a strong candidate travels; dashed amber nodes are decision points where the line can branch. Each node is tagged by <em>who acts</em> — an automated system, the AI screen, an outbound email, or a human recruiter.</p>
+    </div>
+
+    <div class="legend">
+      <span class="tag"><span class="dot" style="background:var(--teal)"></span> Automation / system</span>
+      <span class="tag"><span class="dot" style="background:var(--violet)"></span> AI decision support</span>
+      <span class="tag"><span class="dot" style="background:var(--amber)"></span> Outbound email</span>
+      <span class="tag"><span class="dot" style="background:#8a7f6c"></span> Human touch</span>
+      <span class="tag"><span class="dot" style="background:var(--rose)"></span> Exit path</span>
+    </div>
+
+    <div class="flow">
+
+      <div class="stage"><div class="node start"><span class="code">Start</span><span class="title">Candidate clicks “Apply”</span></div></div>
+      <div class="connector active"></div>
+
+      <div class="stage"><div class="node">
+        <span class="code">01 · Intake</span>
+        <span class="title">Application captured &amp; résumé parsed</span>
+        <span class="sub">ATS ingests the application, structures the résumé into searchable fields, and timestamps entry into the pipeline.</span>
+        <div class="badges"><span class="badge b-auto">Automation</span><span class="badge b-email">→ Email #1 fires</span></div>
+      </div></div>
+      <div class="connector active"></div>
+
+      <div class="stage"><div class="node">
+        <span class="code">02 · Acknowledge</span>
+        <span class="title">Application Received email — sent in &lt; 2 minutes</span>
+        <span class="sub">The candidate immediately knows they’re in the system, what happens next, and by when. Anxiety’s biggest source — silence — is closed on day zero.</span>
+        <div class="badges"><span class="badge b-email">Email</span><span class="badge b-auto">Instant / auto</span></div>
+      </div></div>
+      <div class="connector active"></div>
+
+      <div class="stage"><div class="node">
+        <span class="code">03 · Screen</span>
+        <span class="title">AI résumé screening &amp; scoring</span>
+        <span class="sub">Skills, experience, and role criteria are scored and ranked against the job’s success profile — never against protected characteristics. Output is a recommendation, not a verdict.</span>
+        <div class="badges"><span class="badge b-ai">AI support</span></div>
+      </div></div>
+      <div class="connector active"></div>
+
+      <div class="stage"><div class="node decision">
+        <span class="code">Decision</span>
+        <span class="title">Does the profile meet the role criteria?</span>
+        <span class="sub">Three routes, and no candidate ever exits without a reply.</span>
+      </div></div>
+      <div class="connector"></div>
+
+      <div class="branch-row">
+        <div class="branch exit">
+          <span class="lbl">Below bar</span>
+          Held 24–48h, then a warm early rejection (Email #3) — never an instant auto-decline.
+        </div>
+        <div class="branch hold">
+          <span class="lbl">Borderline</span>
+          Flagged for human recruiter review before any decision is made.
+        </div>
+        <div class="branch go">
+          <span class="lbl">Strong match →</span>
+          Advances down the spine to recruiter review.
+        </div>
+      </div>
+      <div class="connector active"></div>
+
+      <div class="stage"><div class="node">
+        <span class="code">04 · Verify</span>
+        <span class="title">Recruiter review — human in the loop</span>
+        <span class="sub">A recruiter confirms or overrides the AI’s shortlist. The system assists; the person decides.</span>
+        <div class="badges"><span class="badge b-human">Human</span></div>
+      </div></div>
+      <div class="connector active"></div>
+
+      <div class="stage"><div class="node">
+        <span class="code">05 · Invite</span>
+        <span class="title">Interview Invite + self-schedule link</span>
+        <span class="sub">Candidate books their own slot — no email tag. An FAQ concierge and automated reminders handle logistics from here.</span>
+        <div class="badges"><span class="badge b-email">Email</span><span class="badge b-auto">Self-scheduling</span><span class="badge b-ai">FAQ bot</span></div>
+      </div></div>
+      <div class="connector active"></div>
+
+      <div class="stage"><div class="node">
+        <span class="code">06 · Screen call</span>
+        <span class="title">Recruiter / hiring-manager screening call</span>
+        <span class="sub">First real conversation. Prep pack sent automatically beforehand so the candidate walks in informed.</span>
+        <div class="badges"><span class="badge b-human">Human</span><span class="badge b-auto">Auto prep + reminders</span></div>
+      </div></div>
+      <div class="connector active"></div>
+
+      <div class="stage"><div class="node">
+        <span class="code">07 · Interviews</span>
+        <span class="title">Team interviews + optional skills assessment</span>
+        <span class="sub">Structured, scorecard-driven rounds. Interviewers get calendar holds, briefs, and reminders; candidates get status nudges so they’re never left wondering.</span>
+        <div class="badges"><span class="badge b-human">Human</span><span class="badge b-auto">Scorecards + reminders</span></div>
+      </div></div>
+      <div class="connector active"></div>
+
+      <div class="stage"><div class="node decision">
+        <span class="code">Decision</span>
+        <span class="title">Extend an offer?</span>
+      </div></div>
+      <div class="connector"></div>
+
+      <div class="branch-row">
+        <div class="branch exit">
+          <span class="lbl">No →</span>
+          Prompt, personalized post-interview rejection (Email #3, long form) with optional real feedback and a door left open.
+        </div>
+        <div class="branch go">
+          <span class="lbl">Yes →</span>
+          Offer stage begins.
+        </div>
+      </div>
+      <div class="connector active"></div>
+
+      <div class="stage"><div class="node">
+        <span class="code">08 · Offer</span>
+        <span class="title">Offer Extension + one-click e-sign</span>
+        <span class="sub">Key terms summarized up front, a live walkthrough offered, and space to decide. Warmth, not pressure.</span>
+        <div class="badges"><span class="badge b-email">Email</span><span class="badge b-auto">E-sign</span><span class="badge b-human">Human walkthrough</span></div>
+      </div></div>
+      <div class="connector active"></div>
+
+      <div class="stage"><div class="node">
+        <span class="code">09 · Verify + preboard</span>
+        <span class="title">Background / reference checks → pre-boarding</span>
+        <span class="sub">Once accepted: automated checks, then paperwork, equipment orders, and a welcome pack all trigger before day one so nothing waits until the first morning.</span>
+        <div class="badges"><span class="badge b-auto">Automation</span><span class="badge b-human">Human oversight</span></div>
+      </div></div>
+      <div class="connector active"></div>
+
+      <div class="stage"><div class="node end"><span class="code">Destination</span><span class="title">Day One — structured onboarding begins</span></div></div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ============ SECTION 2: EMAIL TEMPLATES ============ -->
+<section id="emails">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="num">02 / THE VOICE</span>
+      <h2>The email suite</h2>
+      <p>Four templates that carry the whole journey. Every one is short, mobile-first, written like a person, and built with <span class="token">{{merge tokens}}</span> so automation stays personal. Each closes with why it’s written the way it is.</p>
+    </div>
+
+    <div class="emails">
+
+      <!-- Email 1 -->
+      <article class="email">
+        <div class="bar"><span class="accent" style="background:var(--teal)"></span><span class="stagetag">Template 01 · Application Received · auto-sent &lt; 2 min</span></div>
+        <div class="head">
+          <span class="lbl">Subject</span>
+          <div class="subject">Your application to <span class="token">{{Company}}</span> is in, <span class="token">{{FirstName}}</span></div>
+          <div class="preview">Preview text: Here’s exactly what happens next — no black box.</div>
+        </div>
+        <div class="body">
+          <p>Hi <span class="token">{{FirstName}}</span>,</p>
+          <p>Thanks for applying for the <span class="token">{{RoleTitle}}</span> role. Your application is safely with us, and a real person — with a little help from our tools — is reviewing it now.</p>
+          <p>Here’s what to expect:</p>
+          <ul>
+            <li>Within <span class="token">{{X business days}}</span> you’ll hear whether we’re moving to a first conversation.</li>
+            <li>Either way, we’ll email you. We don’t leave applications unanswered.</li>
+            <li>Questions in the meantime? Ask our assistant any time at <span class="token">{{FAQLink}}</span> or just reply here.</li>
+          </ul>
+          <p>The road ahead is usually a short screening call, a conversation with the team, then a decision — around <span class="token">{{2–3 weeks}}</span> start to finish.</p>
+          <p>Thanks for your interest in <span class="token">{{Company}}</span>.<br>— <span class="token">{{RecruiterName}}</span>, Talent Team</p>
+        </div>
+        <p class="why"><b>Why it works:</b> Sent instantly, so the candidate never wonders if it went through. It sets a concrete timeline (the #1 cure for applicant anxiety), promises a reply either way, and offers self-serve answers — deflecting “any update?” emails before they’re written.</p>
+      </article>
+
+      <!-- Email 2 -->
+      <article class="email">
+        <div class="bar"><span class="accent" style="background:var(--amber)"></span><span class="stagetag">Template 02 · Interview Invite</span></div>
+        <div class="head">
+          <span class="lbl">Subject</span>
+          <div class="subject">Let’s talk — <span class="token">{{RoleTitle}}</span> at <span class="token">{{Company}}</span></div>
+          <div class="preview">Preview text: Pick a time that works for you.</div>
+        </div>
+        <div class="body">
+          <p>Hi <span class="token">{{FirstName}}</span>,</p>
+          <p>Good news — we’d love to talk with you about the <span class="token">{{RoleTitle}}</span> role.</p>
+          <p>Grab whatever time suits you here: <span class="token">{{SchedulingLink}}</span> (30 minutes, video).</p>
+          <p>You’ll be meeting <span class="token">{{InterviewerName}}</span>, <span class="token">{{InterviewerTitle}}</span>. We’ll cover your background, the role itself, and leave plenty of room for your questions.</p>
+          <p>To help you prepare:</p>
+          <ul>
+            <li><span class="token">{{PrepResourceLink}}</span> — the team, the product, and what this role owns.</li>
+            <li>Bring questions. This is a two-way conversation, not an interrogation.</li>
+          </ul>
+          <p>Need to reschedule, or have any accessibility requirements? Just reply — we’ll sort it.</p>
+          <p>Looking forward to it,<br>— <span class="token">{{RecruiterName}}</span></p>
+        </div>
+        <p class="why"><b>Why it works:</b> Self-scheduling removes days of back-and-forth. Naming the interviewer lowers pre-interview nerves, the prep link levels the playing field, and the explicit accessibility invite signals an inclusive employer from the first real touch.</p>
+      </article>
+
+      <!-- Email 3 -->
+      <article class="email">
+        <div class="bar"><span class="accent" style="background:var(--rose)"></span><span class="stagetag">Template 03 · Rejection · post-interview, personalized</span></div>
+        <div class="head">
+          <span class="lbl">Subject</span>
+          <div class="subject">An update on your <span class="token">{{RoleTitle}}</span> application</div>
+          <div class="preview">Preview text: A note from the team, and an open door.</div>
+        </div>
+        <div class="body">
+          <p>Hi <span class="token">{{FirstName}}</span>,</p>
+          <p>Thank you for the time and energy you put into interviewing for the <span class="token">{{RoleTitle}}</span> role — meeting you was a genuine pleasure.</p>
+          <p>After a lot of thought, we’ve decided to move forward with another candidate for this position. It was a close call, and it isn’t a reflection of your ability.</p>
+          <p><span class="token">{{OptionalFeedback}}</span> — one honest, specific, kind line where you can offer it.</p>
+          <p>We’d like to stay in touch. With your permission, we’ll keep your details on file and reach out when something that fits comes up. You can also watch open roles here: <span class="token">{{CareersLink}}</span>.</p>
+          <p>Wishing you the very best in your search — truly.<br>— <span class="token">{{RecruiterName}}</span></p>
+        </div>
+        <p class="why"><b>Why it works:</b> It’s prompt and unmistakably human — no cold boilerplate. It thanks the candidate specifically, offers real feedback where possible, and keeps the door open, which protects the employer brand and feeds a warm talent pool. <em>(An early-stage variant is shorter and softer, but follows the same reply-either-way promise.)</em></p>
+      </article>
+
+      <!-- Email 4 -->
+      <article class="email">
+        <div class="bar"><span class="accent" style="background:var(--green)"></span><span class="stagetag">Template 04 · Offer Extension</span></div>
+        <div class="head">
+          <span class="lbl">Subject</span>
+          <div class="subject">We’d love for you to join <span class="token">{{Company}}</span>, <span class="token">{{FirstName}}</span></div>
+          <div class="preview">Preview text: The details, and a time to talk it through.</div>
+        </div>
+        <div class="body">
+          <p>Hi <span class="token">{{FirstName}}</span>,</p>
+          <p>It’s official — we’d love to offer you the <span class="token">{{RoleTitle}}</span> role at <span class="token">{{Company}}</span>. The whole team is excited about what you’ll bring.</p>
+          <p>The headlines:</p>
+          <ul>
+            <li><strong>Role:</strong> <span class="token">{{RoleTitle}}</span>, reporting to <span class="token">{{ManagerName}}</span></li>
+            <li><strong>Start date:</strong> <span class="token">{{StartDate}}</span> (flexible if you need it)</li>
+            <li><strong>Compensation:</strong> <span class="token">{{Salary}}</span> + <span class="token">{{Equity/Bonus}}</span> + <span class="token">{{BenefitsSummary}}</span></li>
+          </ul>
+          <p>Everything to review and sign is here: <span class="token">{{OfferLink}}</span>.</p>
+          <p>Let’s find 15 minutes to walk through it together and answer anything — no pressure, we want you to feel great about this: <span class="token">{{SchedulingLink}}</span>.</p>
+          <p>Take the time you need. We’re here for every question.</p>
+          <p>Welcome (almost!),<br>— <span class="token">{{RecruiterName}}</span> &amp; the <span class="token">{{Company}}</span> team</p>
+        </div>
+        <p class="why"><b>Why it works:</b> Leads with warmth, then puts the key terms right up front so the candidate isn’t hunting through a PDF. A live walkthrough plus one-click e-sign lowers friction, and “take the time you need” respects the decision — which lifts acceptance rates.</p>
+      </article>
+
+    </div>
+  </div>
+</section>
+
+<!-- ============ SECTION 3: AI & AUTOMATION PROPOSAL ============ -->
+<section id="proposal">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="num">03 / THE ENGINE</span>
+      <h2>Automation &amp; AI proposal</h2>
+      <p>Two AI capabilities carry the volume — a résumé screen and an FAQ concierge — wrapped in automation that removes waiting and administrative drag. The principle throughout: <strong>the machine handles scale; a human owns every judgment about a person.</strong></p>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <span class="icon">Capability A</span>
+        <h4>AI résumé screening</h4>
+        <p>Parses and scores applications against the role’s success profile, ranks a shortlist, and flags borderline cases for human review. It recommends — it never auto-rejects a strong-adjacent candidate on its own.</p>
+        <div class="tools"><span class="tool">Ashby / Eightfold AI</span><span class="tool">Greenhouse</span><span class="tool">ATS-native scoring</span></div>
+      </div>
+      <div class="card">
+        <span class="icon">Capability B</span>
+        <h4>Candidate FAQ concierge</h4>
+        <p>A conversational assistant answers the repetitive questions — status, timeline, location, benefits, next steps — 24/7, and hands off cleanly to a recruiter when a real person is needed.</p>
+        <div class="tools"><span class="tool">Paradox (Olivia)</span><span class="tool">Custom LLM bot</span><span class="tool">Escalation to human</span></div>
+      </div>
+      <div class="card">
+        <span class="icon">Glue</span>
+        <h4>Workflow automation</h4>
+        <p>Triggers every email, reminder, and status change on time. Sends prep packs, books interviews, orders equipment for pre-boarding — no task waits on someone remembering.</p>
+        <div class="tools"><span class="tool">ATS workflows</span><span class="tool">Zapier / Make</span><span class="tool">Calendly / GoodTime</span><span class="tool">DocuSign</span></div>
+      </div>
+      <div class="card">
+        <span class="icon">Visibility</span>
+        <h4>Analytics &amp; drop-off tracking</h4>
+        <p>A dashboard shows conversion and drop-off at every stage, so you can see <em>where</em> candidates leave and fix that specific step — not guess.</p>
+        <div class="tools"><span class="tool">ATS reporting</span><span class="tool">Stage-conversion dashboard</span><span class="tool">Candidate NPS</span></div>
+      </div>
+    </div>
+
+    <h3 style="margin-top:52px;font-size:24px;">Rollout in three phases</h3>
+    <div class="phases">
+      <div class="phase">
+        <div class="when">Phase 1<small>Weeks 1–4</small></div>
+        <div>
+          <h4>Foundation — close the silences</h4>
+          <ul>
+            <li>Build the ATS pipeline stages and the reply-either-way rule into workflow.</li>
+            <li>Ship the four email templates and wire the instant Application Received trigger.</li>
+            <li>Turn on self-scheduling and automated interview reminders.</li>
+          </ul>
+        </div>
+      </div>
+      <div class="phase">
+        <div class="when">Phase 2<small>Weeks 5–8</small></div>
+        <div>
+          <h4>Intelligence — pilot the AI</h4>
+          <ul>
+            <li>Pilot AI résumé screening on one or two high-volume roles, with recruiters auditing every recommendation.</li>
+            <li>Launch the FAQ concierge with a curated question set and a human-handoff path.</li>
+            <li>Calibrate scoring thresholds and baseline the bias audit.</li>
+          </ul>
+        </div>
+      </div>
+      <div class="phase">
+        <div class="when">Phase 3<small>Weeks 9–12</small></div>
+        <div>
+          <h4>Scale &amp; optimize</h4>
+          <ul>
+            <li>Stand up the drop-off dashboard and review it weekly.</li>
+            <li>A/B test subject lines and timings against candidate NPS and response rates.</li>
+            <li>Expand AI screening to more roles under a written governance policy.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <h3 style="margin-top:52px;font-size:24px;">What we measure</h3>
+    <div class="kpis">
+      <div class="kpi"><div class="k">Time to first response</div><div class="v">Target: &lt; 2 minutes, automated.</div></div>
+      <div class="kpi"><div class="k">Reply rate</div><div class="v">100% — no candidate exits in silence.</div></div>
+      <div class="kpi"><div class="k">Application completion</div><div class="v">% who finish after starting.</div></div>
+      <div class="kpi"><div class="k">Stage drop-off</div><div class="v">Where candidates leave, by step.</div></div>
+      <div class="kpi"><div class="k">Time to hire</div><div class="v">Apply → offer accepted.</div></div>
+      <div class="kpi"><div class="k">Offer acceptance</div><div class="v">Signal of a strong experience.</div></div>
+      <div class="kpi"><div class="k">Candidate NPS</div><div class="v">Surveyed at exit, win or lose.</div></div>
+      <div class="kpi"><div class="k">Adverse-impact ratio</div><div class="v">Fairness of the AI screen, monitored.</div></div>
+    </div>
+
+    <div class="safeguards">
+      <h4>Guardrails — keeping the human element</h4>
+      <ul>
+        <li><b>Human owns the decision.</b> AI ranks and recommends; a recruiter confirms or overrides. Borderline profiles always route to a person.</li>
+        <li><b>Audited for bias.</b> The model scores against role criteria only, never protected characteristics or their proxies, with regular adverse-impact review.</li>
+        <li><b>Transparent to candidates.</b> Applicants are told automation is used and can reach a human at any point.</li>
+        <li><b>Privacy by default.</b> Consent-based data handling, clear retention limits, and GDPR/CCPA alignment.</li>
+        <li><b>No cold auto-rejections.</b> Every decline — even an early one — is a written, warm message, timed with a short human-feeling delay.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p class="mono">The Automated Candidate Experience Workflow — process map, email suite &amp; AI proposal.</p>
+    <p>High-volume hiring without losing the human element: automation carries the load so people get a fast, honest, respectful experience at every step.</p>
+  </div>
+</footer>
+
+<script>
+  // Gentle staggered reveal on scroll (respects reduced-motion via CSS class gate)
+  if (window.matchMedia('(prefers-reduced-motion: no-preference)').matches){
+    const els = document.querySelectorAll('section .wrap > *, .stage, .branch-row, .email, .card, .phase, .kpi');
+    els.forEach((el,i)=>{ el.classList.add('reveal'); el.style.animationDelay=(Math.min(i,6)*40)+'ms'; });
+  }
+</script>
+
+</body>
+</html>
