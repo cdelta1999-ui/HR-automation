@@ -28,6 +28,8 @@ Thanks for applying for the {{RoleTitle}} role. Your application is safely with 
 
 Within a few business days you'll hear whether we're moving to a first conversation. Either way, we'll email you — we don't leave applications unanswered.
 
+Questions in the meantime? Ask our assistant any time at {{FAQLink}}, or just reply here.
+
 Thanks for your interest in {{Company}}.
 — {{RecruiterName}}, Talent Team`,
   },
@@ -100,6 +102,7 @@ function tokensForCandidate(candidate: Candidate): Record<string, string> {
     RecruiterName: candidate.recruiter,
     SchedulingLink: "https://schedule.acme.example/interview",
     OfferLink: "https://offers.acme.example/sign",
+    FAQLink: "/faq",
   };
 }
 
