@@ -55,6 +55,7 @@ function getDb(): DatabaseSync {
       candidate_name TEXT NOT NULL,
       template_id TEXT NOT NULL,
       subject TEXT NOT NULL,
+      body TEXT NOT NULL DEFAULT '',
       sent_at TEXT NOT NULL
     );
   `);
@@ -71,6 +72,10 @@ function migrate(database: DatabaseSync) {
   }
   if (!columns.some((c) => c.name === "hold_release_at")) {
     database.exec("ALTER TABLE candidates ADD COLUMN hold_release_at TEXT");
+  }
+  const emailColumns = database.prepare("PRAGMA table_info(email_log)").all() as { name: string }[];
+  if (!emailColumns.some((c) => c.name === "body")) {
+    database.exec("ALTER TABLE email_log ADD COLUMN body TEXT NOT NULL DEFAULT ''");
   }
 }
 
@@ -149,6 +154,7 @@ function rowToEmailLogEntry(row: Record<string, unknown>): EmailLogEntry {
     candidateName: row.candidate_name as string,
     templateId: row.template_id as EmailLogEntry["templateId"],
     subject: row.subject as string,
+    body: (row.body as string) ?? "",
     sentAt: row.sent_at as string,
   };
 }
@@ -187,11 +193,11 @@ function logEvent(database: DatabaseSync, candidateId: string, label: string) {
 function logEmail(database: DatabaseSync, candidate: Candidate, stage: StageId) {
   const templateId = emailTemplateForStage(stage);
   if (!templateId) return;
-  const { subject } = renderTemplate(templateId, candidate);
+  const { subject, body } = renderTemplate(templateId, candidate);
   database
     .prepare(
-      `INSERT INTO email_log (id, candidate_id, candidate_name, template_id, subject, sent_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO email_log (id, candidate_id, candidate_name, template_id, subject, body, sent_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       `${candidate.id}-${templateId}-${Date.now()}`,
@@ -199,6 +205,7 @@ function logEmail(database: DatabaseSync, candidate: Candidate, stage: StageId) 
       candidate.name,
       templateId,
       subject,
+      body,
       new Date().toISOString(),
     );
 }
@@ -219,6 +226,11 @@ export function advanceCandidate(id: string): BoardState | undefined {
   logEmail(database, candidate, stage);
   for (const label of automationEventsForStage(stage)) {
     logEvent(database, id, label);
+  }
+
+  // Stage 03 is AI decision support, not a human action: score on arrival.
+  if (stage === "ai_screen" && typeof candidate.aiScore !== "number") {
+    applyAiScreen(database, { ...candidate, stage });
   }
   return getBoardState();
 }
@@ -241,11 +253,7 @@ export function rejectCandidate(id: string): BoardState | undefined {
 const HOLD_MIN_HOURS = 24;
 const HOLD_MAX_HOURS = 48;
 
-export function scoreCandidateAi(id: string): BoardState | undefined {
-  const database = getDb();
-  const candidate = getCandidate(database, id);
-  if (!candidate) return undefined;
-
+function applyAiScreen(database: DatabaseSync, candidate: Candidate): void {
   const score = scoreCandidate(candidate);
   const recommendation = recommendationForScore(score);
 
@@ -254,20 +262,68 @@ export function scoreCandidateAi(id: string): BoardState | undefined {
     const holdReleaseAt = new Date(Date.now() + holdHours * 60 * 60 * 1000).toISOString();
     database
       .prepare("UPDATE candidates SET ai_score = ?, hold_release_at = ? WHERE id = ?")
-      .run(score, holdReleaseAt, id);
+      .run(score, holdReleaseAt, candidate.id);
     logEvent(
       database,
-      id,
+      candidate.id,
       `AI screen scored ${score} (below bar) — held for early rejection, auto-releases in ~${Math.round(holdHours)}h`,
     );
   } else {
-    database.prepare("UPDATE candidates SET ai_score = ? WHERE id = ?").run(score, id);
+    database.prepare("UPDATE candidates SET ai_score = ? WHERE id = ?").run(score, candidate.id);
     logEvent(
       database,
-      id,
+      candidate.id,
       `AI screen scored ${score} (${RECOMMENDATION_LABEL[recommendation]})`,
     );
   }
+}
+
+export function scoreCandidateAi(id: string): BoardState | undefined {
+  const database = getDb();
+  const candidate = getCandidate(database, id);
+  if (!candidate) return undefined;
+
+  applyAiScreen(database, candidate);
+  return getBoardState();
+}
+
+const RECRUITERS = ["Dana Kim", "Sam Osei", "Priya Sharma"];
+
+/**
+ * The front door of the workflow: "Candidate clicks Apply." Captures the
+ * application, logs the intake automation, and immediately auto-acknowledges
+ * with Email #1 — the doc's "sent in < 2 minutes" promise.
+ */
+export function createCandidate(name: string, roleTitle: string): BoardState {
+  const database = getDb();
+  const id = `c${Date.now()}`;
+  const now = new Date().toISOString();
+
+  // Round-robin assignment: hand the new application to the least-loaded recruiter.
+  const counts = RECRUITERS.map(
+    (r) =>
+      (
+        database.prepare("SELECT COUNT(*) as count FROM candidates WHERE recruiter = ?").get(r) as {
+          count: number;
+        }
+      ).count,
+  );
+  const recruiter = RECRUITERS[counts.indexOf(Math.min(...counts))];
+
+  database
+    .prepare(
+      `INSERT INTO candidates (id, name, role_title, applied_on, stage, days_in_stage, recruiter, ai_score, rejected_from_stage, hold_release_at)
+       VALUES (?, ?, ?, ?, 'intake', 0, ?, NULL, NULL, NULL)`,
+    )
+    .run(id, name, roleTitle, now, recruiter);
+  logEvent(database, id, "Application submitted");
+  logEvent(database, id, "Résumé parsed into structured fields");
+
+  const candidate = getCandidate(database, id)!;
+  database.prepare("UPDATE candidates SET stage = 'acknowledge' WHERE id = ?").run(id);
+  logEvent(database, id, "Moved to Acknowledged — automated, no human action needed");
+  logEmail(database, candidate, "acknowledge");
+
   return getBoardState();
 }
 

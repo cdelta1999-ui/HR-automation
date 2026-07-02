@@ -5,9 +5,14 @@ process map, email templates, and AI/automation proposal it's built from.
 
 ## What's here
 
+- `src/app/apply` — the front door. A candidate-facing application form; submitting runs the
+  intake automation: candidate created, résumé-parse events logged, auto-moved to Acknowledged,
+  and the Application Received email fired instantly — no human action.
 - `src/app/dashboard` — Candidate Pipeline dashboard. Kanban-style board across the 9 workflow
   stages (Intake → Preboard) plus Hired/Rejected, with per-candidate AI score, recruiter, and
-  time-in-stage. Advance/Reject/Run AI Screen actions call the backend and persist.
+  time-in-stage. Advance/Reject actions call the backend and persist; arriving at AI Screen
+  scores the candidate automatically. Sent emails in the activity log expand to show the full
+  rendered body.
 - `src/components/CandidateDetailPanel.tsx` — click a candidate's name for a slide-over with their
   full activity timeline (application, stage moves, AI screen results).
 - `public/candidate-experience-workflow.html` — the static process map: stage-by-stage flowchart,
@@ -19,9 +24,10 @@ process map, email templates, and AI/automation proposal it's built from.
   `getBoardState`, `advanceCandidate`, `rejectCandidate`, and `scoreCandidateAi`. Seeds itself from
   `data.ts` on first run and persists to `data/hr-automation.db` (gitignored).
 - `src/app/api` — route handlers exposing the backend: `GET /api/board` returns the full board
-  state; `POST /api/candidates/:id` with `{ "action": "advance" | "reject" | "score" }` mutates a
-  candidate (moving stage, firing the matching email, or running the AI screen) and returns the
-  updated board.
+  state; `POST /api/candidates` with `{ "name", "roleTitle" }` creates an application and runs
+  the intake automation; `POST /api/candidates/:id` with
+  `{ "action": "advance" | "reject" | "score" }` mutates a candidate (moving stage, firing the
+  matching email, or running the AI screen) and returns the updated board.
 
 ## Getting started
 

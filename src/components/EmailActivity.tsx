@@ -1,3 +1,6 @@
+"use client";
+
+import { useState } from "react";
 import type { EmailLogEntry } from "@/lib/types";
 import { templateById } from "@/lib/emailTemplates";
 
@@ -13,11 +16,13 @@ function formatTime(iso: string) {
 }
 
 export function EmailActivity({ log }: { log: EmailLogEntry[] }) {
+  const [openId, setOpenId] = useState<string | null>(null);
+
   return (
     <div className="rounded-xl border border-line bg-panel p-5">
       <div className="flex items-center justify-between">
         <h3 className="font-serif text-lg font-semibold text-ink">Automated email activity</h3>
-        <span className="font-mono text-[11px] text-muted">{log.length} sent this session</span>
+        <span className="font-mono text-[11px] text-muted">{log.length} sent</span>
       </div>
 
       {log.length === 0 ? (
@@ -28,18 +33,29 @@ export function EmailActivity({ log }: { log: EmailLogEntry[] }) {
         <ul className="mt-3 flex flex-col gap-2.5">
           {log.map((entry) => {
             const template = templateById(entry.templateId);
+            const open = openId === entry.id;
             return (
-              <li key={entry.id} className="flex items-start gap-3 border-t border-line pt-2.5 first:border-t-0 first:pt-0">
-                <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${ACCENT_DOT[template.accent]}`} />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm text-ink">{entry.subject}</p>
-                  <p className="mt-0.5 text-[12px] text-muted">
-                    {template.label} → {entry.candidateName}
-                  </p>
-                </div>
-                <span className="shrink-0 font-mono text-[11px] text-muted">
-                  {formatTime(entry.sentAt)}
-                </span>
+              <li key={entry.id} className="border-t border-line pt-2.5 first:border-t-0 first:pt-0">
+                <button
+                  onClick={() => setOpenId(open ? null : entry.id)}
+                  className="flex w-full items-start gap-3 text-left"
+                >
+                  <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${ACCENT_DOT[template.accent]}`} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm text-ink">{entry.subject}</p>
+                    <p className="mt-0.5 text-[12px] text-muted">
+                      {template.label} → {entry.candidateName}
+                    </p>
+                  </div>
+                  <span className="shrink-0 font-mono text-[11px] text-muted">
+                    {formatTime(entry.sentAt)}
+                  </span>
+                </button>
+                {open && entry.body && (
+                  <div className="mt-2.5 ml-5 whitespace-pre-line rounded-lg border border-line bg-paper px-4 py-3 text-[13.5px] leading-relaxed text-ink-soft">
+                    {entry.body}
+                  </div>
+                )}
               </li>
             );
           })}

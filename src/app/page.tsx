@@ -17,6 +17,12 @@ export default function Home() {
       </div>
       <div className="flex flex-wrap items-center justify-center gap-3">
         <Link
+          href="/apply"
+          className="rounded-full bg-teal px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-teal/90"
+        >
+          Apply for a role
+        </Link>
+        <Link
           href="/dashboard"
           className="rounded-full bg-ink px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-ink-soft"
         >

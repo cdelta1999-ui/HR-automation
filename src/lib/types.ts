@@ -40,6 +40,7 @@ export interface EmailLogEntry {
   candidateName: string;
   templateId: EmailTemplateId;
   subject: string;
+  body: string;
   sentAt: string;
 }
 
