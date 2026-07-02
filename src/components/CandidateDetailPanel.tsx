@@ -1,5 +1,6 @@
 import type { Candidate, CandidateEvent } from "@/lib/types";
 import { stageById } from "@/lib/stages";
+import { formatHoldCountdown } from "@/lib/time";
 import { StageBadge } from "./StageBadge";
 
 function formatDateTime(iso: string) {
@@ -74,6 +75,13 @@ export function CandidateDetailPanel({
           </div>
         </dl>
 
+        {candidate.holdReleaseAt && (
+          <p className="mt-4 rounded-md bg-rose-soft px-3 py-2 text-[13px] text-rose">
+            On hold — auto-rejects in {formatHoldCountdown(candidate.holdReleaseAt)} unless a
+            recruiter overrides it
+          </p>
+        )}
+
         {!terminal && (
           <div className="mt-5 flex gap-2">
             {awaitingScreen ? (
@@ -89,13 +97,13 @@ export function CandidateDetailPanel({
                   onClick={() => onAdvance(candidate.id)}
                   className="flex-1 rounded-md bg-teal-soft px-3 py-2 font-mono text-[11px] font-bold uppercase tracking-wide text-teal hover:bg-teal hover:text-white"
                 >
-                  Advance →
+                  {candidate.holdReleaseAt ? "Override — advance anyway" : "Advance →"}
                 </button>
                 <button
                   onClick={() => onReject(candidate.id)}
                   className="rounded-md border border-line-strong px-3 py-2 font-mono text-[11px] font-bold uppercase tracking-wide text-muted hover:border-rose hover:text-rose"
                 >
-                  Reject
+                  {candidate.holdReleaseAt ? "Reject now" : "Reject"}
                 </button>
               </>
             )}

@@ -2,7 +2,7 @@ import { DatabaseSync } from "node:sqlite";
 import fs from "node:fs";
 import path from "node:path";
 import { CANDIDATES } from "./data";
-import { nextStage, stageById, emailTemplateForStage } from "./stages";
+import { nextStage, stageById, emailTemplateForStage, automationEventsForStage } from "./stages";
 import { renderTemplate } from "./emailTemplates";
 import { scoreCandidate, recommendationForScore } from "./aiScreening";
 import type { Candidate, CandidateEvent, EmailLogEntry, StageId } from "./types";
@@ -40,7 +40,8 @@ function getDb(): DatabaseSync {
       days_in_stage INTEGER NOT NULL,
       recruiter TEXT NOT NULL,
       ai_score INTEGER,
-      rejected_from_stage TEXT
+      rejected_from_stage TEXT,
+      hold_release_at TEXT
     );
     CREATE TABLE IF NOT EXISTS events (
       id TEXT PRIMARY KEY,
@@ -59,6 +60,7 @@ function getDb(): DatabaseSync {
   `);
   migrate(db);
   seedIfEmpty(db);
+  startHoldSweep(db);
   return db;
 }
 
@@ -67,6 +69,23 @@ function migrate(database: DatabaseSync) {
   if (!columns.some((c) => c.name === "rejected_from_stage")) {
     database.exec("ALTER TABLE candidates ADD COLUMN rejected_from_stage TEXT");
   }
+  if (!columns.some((c) => c.name === "hold_release_at")) {
+    database.exec("ALTER TABLE candidates ADD COLUMN hold_release_at TEXT");
+  }
+}
+
+let holdSweepStarted = false;
+
+function startHoldSweep(database: DatabaseSync) {
+  if (holdSweepStarted) return;
+  holdSweepStarted = true;
+  setInterval(() => {
+    try {
+      sweepDueHolds(database);
+    } catch {
+      // best-effort background sweep; a failed tick just retries next interval
+    }
+  }, 60_000);
 }
 
 function seedIfEmpty(database: DatabaseSync) {
@@ -110,6 +129,7 @@ function rowToCandidate(row: Record<string, unknown>): Candidate {
     recruiter: row.recruiter as string,
     aiScore: row.ai_score == null ? undefined : (row.ai_score as number),
     rejectedFromStage: row.rejected_from_stage == null ? undefined : (row.rejected_from_stage as StageId),
+    holdReleaseAt: row.hold_release_at == null ? undefined : (row.hold_release_at as string),
   };
 }
 
@@ -135,6 +155,7 @@ function rowToEmailLogEntry(row: Record<string, unknown>): EmailLogEntry {
 
 export function getBoardState(): BoardState {
   const database = getDb();
+  sweepDueHolds(database);
   const candidates = (database.prepare("SELECT * FROM candidates").all() as Record<string, unknown>[]).map(
     rowToCandidate,
   );
@@ -189,10 +210,16 @@ export function advanceCandidate(id: string): BoardState | undefined {
 
   const stage = nextStage(candidate.stage);
   database
-    .prepare("UPDATE candidates SET stage = ?, days_in_stage = 0 WHERE id = ?")
+    .prepare("UPDATE candidates SET stage = ?, days_in_stage = 0, hold_release_at = NULL WHERE id = ?")
     .run(stage, id);
+  if (candidate.holdReleaseAt) {
+    logEvent(database, id, "Hold overridden by recruiter — advanced instead of auto-rejecting");
+  }
   logEvent(database, id, `Moved to ${stageById(stage).title}`);
   logEmail(database, candidate, stage);
+  for (const label of automationEventsForStage(stage)) {
+    logEvent(database, id, label);
+  }
   return getBoardState();
 }
 
@@ -203,7 +230,7 @@ export function rejectCandidate(id: string): BoardState | undefined {
 
   database
     .prepare(
-      "UPDATE candidates SET stage = 'rejected', days_in_stage = 0, rejected_from_stage = ? WHERE id = ?",
+      "UPDATE candidates SET stage = 'rejected', days_in_stage = 0, rejected_from_stage = ?, hold_release_at = NULL WHERE id = ?",
     )
     .run(candidate.stage, id);
   logEvent(database, id, `Moved to Rejected (from ${stageById(candidate.stage).title})`);
@@ -211,17 +238,55 @@ export function rejectCandidate(id: string): BoardState | undefined {
   return getBoardState();
 }
 
+const HOLD_MIN_HOURS = 24;
+const HOLD_MAX_HOURS = 48;
+
 export function scoreCandidateAi(id: string): BoardState | undefined {
   const database = getDb();
   const candidate = getCandidate(database, id);
   if (!candidate) return undefined;
 
   const score = scoreCandidate(candidate);
-  database.prepare("UPDATE candidates SET ai_score = ? WHERE id = ?").run(score, id);
-  logEvent(
-    database,
-    id,
-    `AI screen scored ${score} (${RECOMMENDATION_LABEL[recommendationForScore(score)]})`,
-  );
+  const recommendation = recommendationForScore(score);
+
+  if (recommendation === "reject") {
+    const holdHours = HOLD_MIN_HOURS + Math.random() * (HOLD_MAX_HOURS - HOLD_MIN_HOURS);
+    const holdReleaseAt = new Date(Date.now() + holdHours * 60 * 60 * 1000).toISOString();
+    database
+      .prepare("UPDATE candidates SET ai_score = ?, hold_release_at = ? WHERE id = ?")
+      .run(score, holdReleaseAt, id);
+    logEvent(
+      database,
+      id,
+      `AI screen scored ${score} (below bar) — held for early rejection, auto-releases in ~${Math.round(holdHours)}h`,
+    );
+  } else {
+    database.prepare("UPDATE candidates SET ai_score = ? WHERE id = ?").run(score, id);
+    logEvent(
+      database,
+      id,
+      `AI screen scored ${score} (${RECOMMENDATION_LABEL[recommendation]})`,
+    );
+  }
   return getBoardState();
+}
+
+/** Auto-rejects any candidate whose 24-48h hold has elapsed, with a rejection email — never an instant auto-decline. */
+export function sweepDueHolds(database: DatabaseSync): void {
+  const due = database
+    .prepare(
+      "SELECT * FROM candidates WHERE hold_release_at IS NOT NULL AND hold_release_at <= ? AND stage != 'rejected'",
+    )
+    .all(new Date().toISOString()) as Record<string, unknown>[];
+
+  for (const row of due) {
+    const candidate = rowToCandidate(row);
+    database
+      .prepare(
+        "UPDATE candidates SET stage = 'rejected', days_in_stage = 0, rejected_from_stage = ?, hold_release_at = NULL WHERE id = ?",
+      )
+      .run(candidate.stage, candidate.id);
+    logEvent(database, candidate.id, "Hold period elapsed — automatic early rejection sent");
+    logEmail(database, candidate, "rejected");
+  }
 }

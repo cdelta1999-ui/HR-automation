@@ -1,5 +1,6 @@
 import type { Candidate } from "@/lib/types";
 import { recommendationForScore } from "@/lib/aiScreening";
+import { formatHoldCountdown } from "@/lib/time";
 
 function scoreClasses(score: number) {
   if (score >= 80) return "bg-green-soft text-green";
@@ -54,9 +55,9 @@ export function CandidateCard({ candidate, terminal, onAdvance, onReject, onScor
           Borderline — flagged for recruiter review
         </p>
       )}
-      {recommendation === "reject" && (
+      {recommendation === "reject" && candidate.holdReleaseAt && (
         <p className="mt-2.5 rounded-md bg-rose-soft px-2 py-1 text-[11.5px] text-rose">
-          AI recommends early rejection — recruiter decides
+          On hold — auto-rejects in {formatHoldCountdown(candidate.holdReleaseAt)} unless overridden
         </p>
       )}
 
@@ -81,7 +82,7 @@ export function CandidateCard({ candidate, terminal, onAdvance, onReject, onScor
                 onClick={() => onReject(candidate.id)}
                 className="rounded-md border border-line-strong px-2 py-1.5 font-mono text-[11px] font-bold uppercase tracking-wide text-muted transition-colors hover:border-rose hover:text-rose"
               >
-                Reject
+                {recommendation === "reject" ? "Reject now" : "Reject"}
               </button>
             </div>
           )}

@@ -31,6 +31,7 @@ export interface Candidate {
   recruiter: string;
   aiScore?: number;
   rejectedFromStage?: StageId;
+  holdReleaseAt?: string;
 }
 
 export interface EmailLogEntry {
