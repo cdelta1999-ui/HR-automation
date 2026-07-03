@@ -2,15 +2,28 @@ import { DatabaseSync } from "node:sqlite";
 import fs from "node:fs";
 import path from "node:path";
 import { CANDIDATES } from "./data";
-import { nextStage, stageById, emailTemplateForStage, automationEventsForStage } from "./stages";
+import { nextStage, stageById } from "./stages";
 import { renderTemplate } from "./emailTemplates";
 import { scoreCandidate, recommendationForScore } from "./aiScreening";
+import {
+  CONNECTORS,
+  connectorById,
+  triggersForStage,
+  type ConnectorId,
+  type StageTrigger,
+} from "./connectors";
 import type { Candidate, CandidateEvent, EmailLogEntry, StageId } from "./types";
+
+export interface ConnectorState {
+  id: ConnectorId;
+  enabled: boolean;
+}
 
 export interface BoardState {
   candidates: Candidate[];
   events: CandidateEvent[];
   emailLog: EmailLogEntry[];
+  connectorState: ConnectorState[];
 }
 
 const RECOMMENDATION_LABEL = {
@@ -47,7 +60,8 @@ function getDb(): DatabaseSync {
       id TEXT PRIMARY KEY,
       candidate_id TEXT NOT NULL,
       label TEXT NOT NULL,
-      at TEXT NOT NULL
+      at TEXT NOT NULL,
+      connector_id TEXT
     );
     CREATE TABLE IF NOT EXISTS email_log (
       id TEXT PRIMARY KEY,
@@ -58,9 +72,14 @@ function getDb(): DatabaseSync {
       body TEXT NOT NULL DEFAULT '',
       sent_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS connectors (
+      id TEXT PRIMARY KEY,
+      enabled INTEGER NOT NULL DEFAULT 1
+    );
   `);
   migrate(db);
   seedIfEmpty(db);
+  seedConnectors(db);
   startHoldSweep(db);
   return db;
 }
@@ -76,6 +95,10 @@ function migrate(database: DatabaseSync) {
   const emailColumns = database.prepare("PRAGMA table_info(email_log)").all() as { name: string }[];
   if (!emailColumns.some((c) => c.name === "body")) {
     database.exec("ALTER TABLE email_log ADD COLUMN body TEXT NOT NULL DEFAULT ''");
+  }
+  const eventColumns = database.prepare("PRAGMA table_info(events)").all() as { name: string }[];
+  if (!eventColumns.some((c) => c.name === "connector_id")) {
+    database.exec("ALTER TABLE events ADD COLUMN connector_id TEXT");
   }
 }
 
@@ -104,7 +127,7 @@ function seedIfEmpty(database: DatabaseSync) {
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   const insertEvent = database.prepare(
-    `INSERT INTO events (id, candidate_id, label, at) VALUES (?, ?, ?, ?)`,
+    `INSERT INTO events (id, candidate_id, label, at, connector_id) VALUES (?, ?, ?, ?, NULL)`,
   );
 
   for (const c of CANDIDATES) {
@@ -121,6 +144,13 @@ function seedIfEmpty(database: DatabaseSync) {
     );
     insertEvent.run(`${c.id}-applied`, c.id, "Application submitted", c.appliedOn);
   }
+}
+
+function seedConnectors(database: DatabaseSync) {
+  const insert = database.prepare(
+    "INSERT OR IGNORE INTO connectors (id, enabled) VALUES (?, 1)",
+  );
+  for (const c of CONNECTORS) insert.run(c.id);
 }
 
 function rowToCandidate(row: Record<string, unknown>): Candidate {
@@ -144,6 +174,7 @@ function rowToEvent(row: Record<string, unknown>): CandidateEvent {
     candidateId: row.candidate_id as string,
     label: row.label as string,
     at: row.at as string,
+    connectorId: (row.connector_id as ConnectorId | null) ?? undefined,
   };
 }
 
@@ -157,6 +188,17 @@ function rowToEmailLogEntry(row: Record<string, unknown>): EmailLogEntry {
     body: (row.body as string) ?? "",
     sentAt: row.sent_at as string,
   };
+}
+
+function readConnectorState(database: DatabaseSync): ConnectorState[] {
+  const rows = database.prepare("SELECT id, enabled FROM connectors").all() as {
+    id: string;
+    enabled: number;
+  }[];
+  const byId = new Map(rows.map((r) => [r.id, r.enabled === 1]));
+  // Fall back to enabled=true for any connector that isn't in the table yet
+  // (e.g. right after adding a new one to the registry).
+  return CONNECTORS.map((c) => ({ id: c.id, enabled: byId.get(c.id) ?? true }));
 }
 
 export function getBoardState(): BoardState {
@@ -174,7 +216,8 @@ export function getBoardState(): BoardState {
       unknown
     >[]
   ).map(rowToEmailLogEntry);
-  return { candidates, events, emailLog };
+  const connectorState = readConnectorState(database);
+  return { candidates, events, emailLog, connectorState };
 }
 
 function getCandidate(database: DatabaseSync, id: string): Candidate | undefined {
@@ -184,15 +227,30 @@ function getCandidate(database: DatabaseSync, id: string): Candidate | undefined
   return row ? rowToCandidate(row) : undefined;
 }
 
-function logEvent(database: DatabaseSync, candidateId: string, label: string) {
+function logEvent(
+  database: DatabaseSync,
+  candidateId: string,
+  label: string,
+  connectorId?: ConnectorId,
+) {
   database
-    .prepare("INSERT INTO events (id, candidate_id, label, at) VALUES (?, ?, ?, ?)")
-    .run(`${candidateId}-${Date.now()}-${Math.random()}`, candidateId, label, new Date().toISOString());
+    .prepare(
+      "INSERT INTO events (id, candidate_id, label, at, connector_id) VALUES (?, ?, ?, ?, ?)",
+    )
+    .run(
+      `${candidateId}-${Date.now()}-${Math.random()}`,
+      candidateId,
+      label,
+      new Date().toISOString(),
+      connectorId ?? null,
+    );
 }
 
-function logEmail(database: DatabaseSync, candidate: Candidate, stage: StageId) {
-  const templateId = emailTemplateForStage(stage);
-  if (!templateId) return;
+function logEmail(
+  database: DatabaseSync,
+  candidate: Candidate,
+  templateId: EmailLogEntry["templateId"],
+) {
   const { subject, body } = renderTemplate(templateId, candidate);
   database
     .prepare(
@@ -210,6 +268,53 @@ function logEmail(database: DatabaseSync, candidate: Candidate, stage: StageId) 
     );
 }
 
+/**
+ * The dispatcher. When a candidate arrives on a stage, every trigger for
+ * that stage fires through its connector — provided the connector is
+ * enabled. A disabled connector logs nothing, sends nothing, does nothing.
+ */
+function fireStageTriggers(
+  database: DatabaseSync,
+  candidate: Candidate,
+  stage: StageId,
+): void {
+  const enabled = new Map(readConnectorState(database).map((c) => [c.id, c.enabled]));
+  for (const trigger of triggersForStage(stage)) {
+    if (!enabled.get(trigger.connectorId)) {
+      logEvent(
+        database,
+        candidate.id,
+        `[${connectorById(trigger.connectorId).name}] skipped (connector disabled) — ${trigger.action}`,
+        trigger.connectorId,
+      );
+      continue;
+    }
+    dispatchTrigger(database, candidate, trigger);
+  }
+
+  // Stage 03 is AI decision support, not just an event: score on arrival.
+  if (
+    stage === "ai_screen" &&
+    enabled.get("ashby_ai") &&
+    typeof candidate.aiScore !== "number"
+  ) {
+    applyAiScreen(database, { ...candidate, stage });
+  }
+}
+
+function dispatchTrigger(
+  database: DatabaseSync,
+  candidate: Candidate,
+  trigger: StageTrigger,
+): void {
+  const connector = connectorById(trigger.connectorId);
+  if (trigger.emailTemplateId) {
+    logEmail(database, candidate, trigger.emailTemplateId);
+    return;
+  }
+  logEvent(database, candidate.id, `[${connector.name}] ${trigger.action}`, trigger.connectorId);
+}
+
 export function advanceCandidate(id: string): BoardState | undefined {
   const database = getDb();
   const candidate = getCandidate(database, id);
@@ -223,15 +328,9 @@ export function advanceCandidate(id: string): BoardState | undefined {
     logEvent(database, id, "Hold overridden by recruiter — advanced instead of auto-rejecting");
   }
   logEvent(database, id, `Moved to ${stageById(stage).title}`);
-  logEmail(database, candidate, stage);
-  for (const label of automationEventsForStage(stage)) {
-    logEvent(database, id, label);
-  }
 
-  // Stage 03 is AI decision support, not a human action: score on arrival.
-  if (stage === "ai_screen" && typeof candidate.aiScore !== "number") {
-    applyAiScreen(database, { ...candidate, stage });
-  }
+  const advanced = getCandidate(database, id)!;
+  fireStageTriggers(database, advanced, stage);
   return getBoardState();
 }
 
@@ -246,7 +345,7 @@ export function rejectCandidate(id: string): BoardState | undefined {
     )
     .run(candidate.stage, id);
   logEvent(database, id, `Moved to Rejected (from ${stageById(candidate.stage).title})`);
-  logEmail(database, candidate, "rejected");
+  fireStageTriggers(database, { ...candidate, stage: "rejected" }, "rejected");
   return getBoardState();
 }
 
@@ -266,14 +365,16 @@ function applyAiScreen(database: DatabaseSync, candidate: Candidate): void {
     logEvent(
       database,
       candidate.id,
-      `AI screen scored ${score} (below bar) — held for early rejection, auto-releases in ~${Math.round(holdHours)}h`,
+      `[Résumé Screener] scored ${score} (below bar) — held for early rejection, auto-releases in ~${Math.round(holdHours)}h`,
+      "ashby_ai",
     );
   } else {
     database.prepare("UPDATE candidates SET ai_score = ? WHERE id = ?").run(score, candidate.id);
     logEvent(
       database,
       candidate.id,
-      `AI screen scored ${score} (${RECOMMENDATION_LABEL[recommendation]})`,
+      `[Résumé Screener] scored ${score} (${RECOMMENDATION_LABEL[recommendation]})`,
+      "ashby_ai",
     );
   }
 }
@@ -292,7 +393,8 @@ const RECRUITERS = ["Dana Kim", "Sam Osei", "Priya Sharma"];
 /**
  * The front door of the workflow: "Candidate clicks Apply." Captures the
  * application, logs the intake automation, and immediately auto-acknowledges
- * with Email #1 — the doc's "sent in < 2 minutes" promise.
+ * — the acknowledge stage's triggers (Gmail template, etc.) then fire
+ * through the dispatcher, honoring the doc's "sent in < 2 minutes" promise.
  */
 export function createCandidate(name: string, roleTitle: string): BoardState {
   const database = getDb();
@@ -322,7 +424,7 @@ export function createCandidate(name: string, roleTitle: string): BoardState {
   const candidate = getCandidate(database, id)!;
   database.prepare("UPDATE candidates SET stage = 'acknowledge' WHERE id = ?").run(id);
   logEvent(database, id, "Moved to Acknowledged — automated, no human action needed");
-  logEmail(database, candidate, "acknowledge");
+  fireStageTriggers(database, { ...candidate, stage: "acknowledge" }, "acknowledge");
 
   return getBoardState();
 }
@@ -343,6 +445,18 @@ export function sweepDueHolds(database: DatabaseSync): void {
       )
       .run(candidate.stage, candidate.id);
     logEvent(database, candidate.id, "Hold period elapsed — automatic early rejection sent");
-    logEmail(database, candidate, "rejected");
+    fireStageTriggers(database, { ...candidate, stage: "rejected" }, "rejected");
   }
+}
+
+export function setConnectorEnabled(id: ConnectorId, enabled: boolean): ConnectorState[] {
+  const database = getDb();
+  database
+    .prepare("INSERT INTO connectors (id, enabled) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET enabled = excluded.enabled")
+    .run(id, enabled ? 1 : 0);
+  return readConnectorState(database);
+}
+
+export function getConnectorState(): ConnectorState[] {
+  return readConnectorState(getDb());
 }

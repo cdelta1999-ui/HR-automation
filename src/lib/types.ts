@@ -1,4 +1,5 @@
 import type { EmailTemplateId } from "./emailTemplates";
+import type { ConnectorId } from "./connectors";
 
 export type StageId =
   | "intake"
@@ -49,4 +50,6 @@ export interface CandidateEvent {
   candidateId: string;
   label: string;
   at: string;
+  /** Present when the event was fired by a connector via the stage-trigger dispatcher. */
+  connectorId?: ConnectorId;
 }
